@@ -87,11 +87,23 @@ export async function fetchNewPairs(): Promise<TokenPair[]> {
 
     const allPairs: TokenPair[] = [];
     
-    const searchTerms = ['pump', 'pepe', 'doge', 'moon', 'cat', 'inu', 'shib', 'solana', 'bonk', 'wif'];
+    const searchTerms = ['pump', 'pepe', 'doge', 'moon', 'cat', 'inu', 'shib', 'bonk', 'wif'];
+    
+    // Build URL with optional API token
+    const buildSearchUrl = (term: string) => {
+      let url = `${config.api.dexscreener}/search?q=${encodeURIComponent(term)}`;
+      if (config.api.dexscreenerToken) {
+        url += `&token=${config.api.dexscreenerToken}`;
+      }
+      return url;
+    };
     
     const searchPromises = searchTerms.map(async (term) => {
       try {
-        const url = `${config.api.dexscreener}/search?q=${encodeURIComponent(term)}`;
+        // Add delay between requests to avoid rate limiting
+        await new Promise(resolve => setTimeout(resolve, searchTerms.indexOf(term) * 800));
+        
+        const url = buildSearchUrl(term);
         const data = await fetchWithRetry<DexScreenerResponse>(url, {
           timeout: 8000,
           retries: 2

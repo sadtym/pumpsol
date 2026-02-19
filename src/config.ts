@@ -25,6 +25,7 @@ interface ApiConfig {
   birdeye: string;
   solscan: string;
   rpcUrl: string;
+  dexscreenerToken?: string;
 }
 
 export interface Config {
@@ -100,7 +101,8 @@ export const config: Config = {
     dexscreener: 'https://api.dexscreener.com/latest/dex',
     birdeye: 'https://public-api.birdeye.so/public',
     solscan: 'https://api.solscan.io',
-    rpcUrl: getEnvString('SOLANA_RPC_URL', 'https://api.mainnet-beta.solana.com')
+    rpcUrl: getEnvString('SOLANA_RPC_URL', 'https://api.mainnet-beta.solana.com'),
+    dexscreenerToken: process.env.DEXSCREENER_API_TOKEN
   },
   
   enableLogs: process.env.ENABLE_LOGS !== 'false'
