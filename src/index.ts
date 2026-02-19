@@ -1,7 +1,7 @@
 import { logger } from './utils/logger.js';
 import { config } from './config.js';
 import { fetchNewPairs, getCacheStats } from './services/scanner.js';
-import { filterToken } from './services/filter.js';
+import { filterToken, filterTokenWithSecurity } from './services/filter.js';
 import { initBot, sendAlert, sendStartup, sendErrorNotification } from './services/telegram.js';
 import { startHealthServer } from './utils/health.js';
 
@@ -29,7 +29,8 @@ async function scanLoop(): Promise<void> {
       try {
         logger.info(`\n--- Processing: ${pair.baseToken.symbol} ---`);
         
-        const filterResult = filterToken(pair);
+        // Use enhanced filter with security checks
+        const filterResult = await filterTokenWithSecurity(pair);
 
         if (!filterResult.passed) {
           continue;
@@ -75,9 +76,15 @@ function healthCheck(): void {
 }
 
 function startScanner(): void {
-  logger.info('\n🚀 Scanner started!');
+  logger.info('\n🚀 Scanner v4.0 - ENHANCED SECURITY Edition started!');
   logger.info(`Poll interval: ${config.scanner.pollInterval}ms (${config.scanner.pollInterval / 1000}s)`);
-  logger.info(`Filters: Liq≥$${config.scanner.minLiquidity}, Vol≥$${config.scanner.minVolume5m}, Age≤${config.scanner.maxAgeMinutes}m`);
+  logger.info(`Filters: Liq≥$${config.scanner.minLiquidity}, Vol5m≥$${config.scanner.minVolume5m}, Vol24h≥$${config.scanner.minVolume24h}, Age≤${config.scanner.maxAgeMinutes}m`);
+  logger.info(`Security Checks:`);
+  logger.info(`  - Mint Authority: ${config.scanner.enableMintAuthorityCheck ? '✅ Enabled' : '❌ Disabled'}`);
+  logger.info(`  - Liquidity Lock: ${config.scanner.enableLiquidityLockCheck ? '✅ Enabled' : '❌ Disabled'}`);
+  logger.info(`  - Holder Distribution: ${config.scanner.enableHolderDistributionCheck ? '✅ Enabled' : '❌ Disabled'}`);
+  logger.info(`  - Max Holder Concentration: ${config.scanner.maxHolderConcentration}%`);
+  logger.info(`  - Banned Words: ${config.scanner.bannedWords.length} words`);
   logger.info('Press Ctrl+C to stop\n');
 
   scanLoop();
@@ -87,8 +94,8 @@ function startScanner(): void {
 
 async function main(): Promise<void> {
   console.log('\n╔══════════════════════════════════════════╗');
-  console.log('║  Meme Coin Scanner v3.0 - PRODUCTION    ║');
-  console.log('║  Hardened • Stable • 24/7 Ready         ║');
+  console.log('║  Meme Coin Scanner v4.0 - SECURITY     ║');
+  console.log('║  Enhanced • Protected • Anti-Rug      ║');
   console.log('╚══════════════════════════════════════════╝\n');
 
   logger.info('Starting health check server...');

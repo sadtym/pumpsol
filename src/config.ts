@@ -11,7 +11,13 @@ interface ScannerConfig {
   pollInterval: number;
   minLiquidity: number;
   minVolume5m: number;
+  minVolume24h: number;
   maxAgeMinutes: number;
+  enableMintAuthorityCheck: boolean;
+  enableLiquidityLockCheck: boolean;
+  enableHolderDistributionCheck: boolean;
+  maxHolderConcentration: number;
+  bannedWords: string[];
 }
 
 interface ApiConfig {
@@ -49,6 +55,27 @@ function getEnvNumber(key: string, defaultValue: number): number {
   return parsed;
 }
 
+function getEnvBoolean(key: string, defaultValue: boolean): boolean {
+  const value = process.env[key];
+  if (!value) return defaultValue;
+  return value.toLowerCase() === 'true';
+}
+
+function getEnvArray(key: string, defaultValue: string[]): string[] {
+  const value = process.env[key];
+  if (!value) return defaultValue;
+  return value.split(',').map(s => s.trim()).filter(s => s.length > 0);
+}
+
+// Default banned words list
+const DEFAULT_BANNED_WORDS = [
+  'test', 'fake', 'scam', 'rug', 'honey', 'ponzi', 'dump',
+  'sex', 'porn', 'xxx', 'adult', 'nude', 'cock', 'dick', 'pussy',
+  'hitler', 'nazi', 'terror', 'bomb', 'kill', 'rape', 'abuse',
+  'shit', 'damn', 'fuck', 'ass', 'bitch', 'bastard', 'cunt',
+  'whore', 'slut', 'nigger', 'chink', 'spic', 'kike', 'faggot'
+];
+
 export const config: Config = {
   telegram: {
     botToken: getEnvString('TELEGRAM_BOT_TOKEN'),
@@ -60,7 +87,13 @@ export const config: Config = {
     pollInterval: getEnvNumber('POLL_INTERVAL', 3000),
     minLiquidity: getEnvNumber('MIN_LIQUIDITY', 300),
     minVolume5m: getEnvNumber('MIN_VOLUME', 50),
-    maxAgeMinutes: getEnvNumber('MAX_AGE', 10)
+    minVolume24h: getEnvNumber('MIN_VOLUME_24H', 1000),
+    maxAgeMinutes: getEnvNumber('MAX_AGE', 10),
+    enableMintAuthorityCheck: getEnvBoolean('CHECK_MINT_AUTHORITY', true),
+    enableLiquidityLockCheck: getEnvBoolean('CHECK_LIQUIDITY_LOCK', true),
+    enableHolderDistributionCheck: getEnvBoolean('CHECK_HOLDER_DISTRIBUTION', true),
+    maxHolderConcentration: getEnvNumber('MAX_HOLDER_CONCENTRATION', 10),
+    bannedWords: getEnvArray('BANNED_WORDS', DEFAULT_BANNED_WORDS)
   },
   
   api: {
@@ -81,3 +114,8 @@ if (!config.telegram.botToken || !config.telegram.channelId) {
 console.log('[CONFIG] Configuration loaded successfully');
 console.log(`[CONFIG] Poll interval: ${config.scanner.pollInterval}ms`);
 console.log(`[CONFIG] Min liquidity: $${config.scanner.minLiquidity}`);
+console.log(`[CONFIG] Min volume 24h: $${config.scanner.minVolume24h}`);
+console.log(`[CONFIG] Mint authority check: ${config.scanner.enableMintAuthorityCheck}`);
+console.log(`[CONFIG] Liquidity lock check: ${config.scanner.enableLiquidityLockCheck}`);
+console.log(`[CONFIG] Holder distribution check: ${config.scanner.enableHolderDistributionCheck}`);
+console.log(`[CONFIG] Banned words: ${config.scanner.bannedWords.length} words`);

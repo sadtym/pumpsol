@@ -3,7 +3,7 @@ import { logger } from '../utils/logger.js';
 import { getCacheStats } from '../services/scanner.js';
 import { getCircuitState } from '../utils/fetch.js';
 
-const PORT = 8080;
+const PORT = 8081;
 const startTime = Date.now();
 
 export function startHealthServer(): void {
