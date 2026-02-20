@@ -3,6 +3,7 @@ import { config } from '../config.js';
 import { fetchLatestBoosts, fetchTopBoosts, fetchCommunityTakeovers, getTokenPairData, BoostToken, CommunityTakeover } from './dexscreenerV1.js';
 import { filterToken, FilterResult } from './filter.js';
 import { sendAlert } from './telegram.js';
+import { analyzeTokenStrategies, getStrategyStats } from './strategies.js';
 
 interface TrendingToken {
   type: 'boost' | 'top' | 'takeover';
@@ -103,6 +104,9 @@ async function processTrendingToken(trending: TrendingToken, sendNotification: b
         if (sendNotification) {
           const message = formatBoostAlert(boostToken);
           await sendBoostAlert(message);
+          
+          // Also run strategy analysis for this token
+          await runStrategyAnalysis(tokenAddress, boostToken);
         }
         
         return true;
@@ -118,6 +122,9 @@ async function processTrendingToken(trending: TrendingToken, sendNotification: b
       if (sendNotification) {
         const message = formatTakeoverAlert(takeover);
         await sendBoostAlert(message);
+        
+        // Also run strategy analysis for this token
+        await runStrategyAnalysis(tokenAddress, undefined, takeover);
       }
       
       return true;
@@ -220,6 +227,59 @@ async function sendBoostAlert(message: string): Promise<boolean> {
   } catch (error) {
     logger.error('Failed to send boost alert:', error);
     return false;
+  }
+}
+
+/**
+ * Run strategy analysis and send alerts if any strategy triggers
+ */
+async function runStrategyAnalysis(
+  tokenAddress: string, 
+  boostToken?: BoostToken,
+  takeover?: CommunityTakeover
+): Promise<void> {
+  try {
+    // Get additional pair data for more accurate analysis
+    let pairData = null;
+    try {
+      pairData = await getTokenPairData('solana', tokenAddress);
+    } catch (e) {
+      // Pair data not available, use token data
+    }
+    
+    // Extract available data
+    const volume = pairData?.volume?.h24 || boostToken?.liquidity || 0;
+    const liquidity = pairData?.liquidity?.usd || boostToken?.liquidity || 0;
+    const marketCap = pairData?.fdv || boostToken?.marketCap || 0;
+    const price = pairData?.priceUsd || boostToken?.price || 0;
+    const priceChange5m = pairData?.priceChange?.m5 || 0;
+    const priceChange1h = pairData?.priceChange?.h1 || 0;
+    const priceChange24h = pairData?.priceChange?.h24 || boostToken?.priceChange?.h24 || 0;
+    
+    // Run strategy analysis
+    const result = await analyzeTokenStrategies(
+      tokenAddress,
+      volume,
+      liquidity,
+      marketCap,
+      price,
+      priceChange5m,
+      priceChange1h,
+      priceChange24h
+    );
+    
+    // Send alerts for triggered strategies
+    if (result.triggered && result.messages.length > 0) {
+      logger.success(`🎯 Strategy triggered for ${tokenAddress}: ${result.messages.length} alerts`);
+      
+      for (const message of result.messages) {
+        await sendBoostAlert(message);
+        // Rate limit between strategy alerts
+        await new Promise(r => setTimeout(r, 300));
+      }
+    }
+  } catch (error) {
+    logger.error(`Error in strategy analysis for ${tokenAddress}:`, error);
   }
 }
 
