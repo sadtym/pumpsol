@@ -80,7 +80,7 @@ function healthCheck(): void {
 }
 
 function startScanner(): void {
-  logger.info('\n🚀 Scanner v4.0 - ENHANCED SECURITY Edition started!');
+  logger.info('\n🚀 Scanner v5.0 - STRICT SECURITY Edition started!');
   logger.info(`Poll interval: ${config.scanner.pollInterval}ms (${config.scanner.pollInterval / 1000}s)`);
   logger.info(`Filters: Liq≥$${config.scanner.minLiquidity}, Vol5m≥$${config.scanner.minVolume5m}, Vol24h≥$${config.scanner.minVolume24h}, Age≤${config.scanner.maxAgeMinutes}m`);
   logger.info(`Security Checks:`);

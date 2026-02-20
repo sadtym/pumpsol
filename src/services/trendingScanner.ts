@@ -63,18 +63,34 @@ async function processTrendingToken(trending: TrendingToken): Promise<boolean> {
       
       // Apply basic filters based on available data
       if (boostToken.liquidity && boostToken.liquidity < config.scanner.minLiquidity) {
-        logger.info(`Skipping ${tokenAddress}: Low liquidity ($${boostToken.liquidity})`);
+        logger.info(`Skipping ${tokenAddress}: Low liquidity ($${boostToken.liquidity} < $${config.scanner.minLiquidity})`);
         return false;
       }
       
-      if (boostToken.marketCap && boostToken.marketCap < 10000) {
-        logger.info(`Skipping ${tokenAddress}: Low market cap ($${boostToken.marketCap})`);
+      // Stricter market cap filter - at least $50k
+      if (boostToken.marketCap && boostToken.marketCap < 50000) {
+        logger.info(`Skipping ${tokenAddress}: Low market cap ($${boostToken.marketCap} < $50k)`);
+        return false;
+      }
+      
+      // Check for honeypot pattern - extreme price changes with low volume
+      if (boostToken.priceChange) {
+        const priceChange = Math.abs(boostToken.priceChange.h24);
+        if (priceChange > 500 && (!boostToken.liquidity || boostToken.liquidity < 5000)) {
+          logger.info(`Skipping ${tokenAddress}: Honeypot pattern detected (${priceChange}% change, low liquidity)`);
+          return false;
+        }
+      }
+      
+      // Minimum 2 active boosts to filter out low-quality tokens
+      if (!boostToken.boosts || boostToken.boosts.active < 2) {
+        logger.info(`Skipping ${tokenAddress}: Low boost count (${boostToken.boosts?.active || 0} < 2)`);
         return false;
       }
       
       // Check if it has active boosts
       if (boostToken.boosts && boostToken.boosts.active > 0) {
-        logger.success(`🎯 Found boosted token: ${tokenAddress} (${boostToken.boosts.active} active boosts)`);
+        logger.success(`🎯 Found boosted token: ${tokenAddress} (${boostToken.boosts.active} active boosts, MC: $${(boostToken.marketCap || 0)/1000}k)`);
         
         // Format message for telegram
         const message = formatBoostAlert(boostToken);

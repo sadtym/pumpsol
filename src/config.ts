@@ -86,14 +86,14 @@ export const config: Config = {
   
   scanner: {
     pollInterval: getEnvNumber('POLL_INTERVAL', 3000),
-    minLiquidity: getEnvNumber('MIN_LIQUIDITY', 300),
-    minVolume5m: getEnvNumber('MIN_VOLUME', 50),
-    minVolume24h: getEnvNumber('MIN_VOLUME_24H', 1000),
+    minLiquidity: getEnvNumber('MIN_LIQUIDITY', 1000),
+    minVolume5m: getEnvNumber('MIN_VOLUME', 200),
+    minVolume24h: getEnvNumber('MIN_VOLUME_24H', 5000),
     maxAgeMinutes: getEnvNumber('MAX_AGE', 10),
     enableMintAuthorityCheck: getEnvBoolean('CHECK_MINT_AUTHORITY', true),
     enableLiquidityLockCheck: getEnvBoolean('CHECK_LIQUIDITY_LOCK', true),
     enableHolderDistributionCheck: getEnvBoolean('CHECK_HOLDER_DISTRIBUTION', true),
-    maxHolderConcentration: getEnvNumber('MAX_HOLDER_CONCENTRATION', 10),
+    maxHolderConcentration: getEnvNumber('MAX_HOLDER_CONCENTRATION', 5),
     bannedWords: getEnvArray('BANNED_WORDS', DEFAULT_BANNED_WORDS)
   },
   
