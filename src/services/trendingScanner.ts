@@ -4,6 +4,7 @@ import { fetchLatestBoosts, fetchTopBoosts, fetchCommunityTakeovers, getTokenPai
 import { filterToken, FilterResult } from './filter.js';
 import { sendAlert } from './telegram.js';
 import { analyzeTokenStrategies, getStrategyStats } from './strategies.js';
+import { updateStats } from '../utils/health.js';
 
 interface TrendingToken {
   type: 'boost' | 'top' | 'takeover';
@@ -353,6 +354,9 @@ export async function scanTrendingTokens(): Promise<void> {
     }
     
     logger.info(`\nStats: Found ${tokensFound}, Passed ${tokensPassed}`);
+    
+    // Update dashboard stats
+    updateStats(scanCount, tokensFound, tokensPassed);
     
   } catch (error) {
     logger.error('Error in trending scan:', error);
