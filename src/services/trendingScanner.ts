@@ -16,7 +16,9 @@ interface TrendingToken {
 let scanCount = 0;
 let tokensFound = 0;
 let tokensPassed = 0;
+let uniqueAlerts = 0; // Track unique tokens that were alerted
 const seenTokens = new Set<string>();
+const alertedTokens = new Set<string>(); // Track tokens that were actually alerted
 let isFirstScan = true; // Flag to skip alerts on first scan
 
 async function processTrendingToken(trending: TrendingToken, sendNotification: boolean = true): Promise<boolean> {
@@ -91,18 +93,21 @@ async function processTrendingToken(trending: TrendingToken, sendNotification: b
         }
       }
       
-      // Minimum 2 active boosts to filter out low-quality tokens
-      if (!boostToken.boosts || boostToken.boosts.active < 2) {
-        logger.info(`Skipping ${tokenAddress}: Low boost count (${boostToken.boosts?.active || 0} < 2)`);
+      // Minimum 1 active boost (relaxed from 2 to catch more tokens)
+      if (!boostToken.boosts || boostToken.boosts.active < 1) {
+        logger.info(`Skipping ${tokenAddress}: No active boosts (${boostToken.boosts?.active || 0} < 1)`);
         return false;
       }
       
-      // Check if it has active boosts
-      if (boostToken.boosts && boostToken.boosts.active > 0) {
+      // Token has at least 1 active boost - this is our target!
+      if (boostToken.boosts && boostToken.boosts.active >= 1) {
         logger.success(`🎯 Found boosted token: ${tokenAddress} (${boostToken.boosts.active} active boosts, MC: $${(boostToken.marketCap || 0)/1000}k)`);
         
-        // Only send notification if enabled
-        if (sendNotification) {
+        // Only send notification if enabled AND not already alerted
+        if (sendNotification && !alertedTokens.has(tokenKey)) {
+          alertedTokens.add(tokenKey);
+          uniqueAlerts++;
+          
           const message = formatBoostAlert(boostToken);
           await sendBoostAlert(message);
           
@@ -119,8 +124,11 @@ async function processTrendingToken(trending: TrendingToken, sendNotification: b
       const takeover = token as CommunityTakeover;
       logger.success(`🏴 Found community takeover: ${tokenAddress}`);
       
-      // Only send notification if enabled
-      if (sendNotification) {
+      // Only send notification if enabled AND not already alerted
+      if (sendNotification && !alertedTokens.has(tokenKey)) {
+        alertedTokens.add(tokenKey);
+        uniqueAlerts++;
+        
         const message = formatTakeoverAlert(takeover);
         await sendBoostAlert(message);
         
@@ -272,12 +280,20 @@ async function runStrategyAnalysis(
     
     // Send alerts for triggered strategies
     if (result.triggered && result.messages.length > 0) {
-      logger.success(`🎯 Strategy triggered for ${tokenAddress}: ${result.messages.length} alerts`);
+      const chainId = 'solana';
+      const tokenKey = `${chainId}:${tokenAddress}`;
       
-      for (const message of result.messages) {
-        await sendBoostAlert(message);
-        // Rate limit between strategy alerts
-        await new Promise(r => setTimeout(r, 300));
+      // Check if already alerted for strategy
+      if (!alertedTokens.has(tokenKey + '_strategy')) {
+        alertedTokens.add(tokenKey + '_strategy');
+        
+        logger.success(`🎯 Strategy triggered for ${tokenAddress}: ${result.messages.length} alerts`);
+        
+        for (const message of result.messages) {
+          await sendBoostAlert(message);
+          // Rate limit between strategy alerts
+          await new Promise(r => setTimeout(r, 300));
+        }
       }
     }
   } catch (error) {
@@ -353,7 +369,7 @@ export async function scanTrendingTokens(): Promise<void> {
       await new Promise(r => setTimeout(r, 500));
     }
     
-    logger.info(`\nStats: Found ${tokensFound}, Passed ${tokensPassed}`);
+    logger.info(`\nStats: Found ${tokensFound}, Passed ${tokensPassed}, Unique Alerts: ${uniqueAlerts}`);
     
     // Update dashboard stats
     updateStats(scanCount, tokensFound, tokensPassed);
