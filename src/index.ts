@@ -4,6 +4,10 @@ import { fetchNewPairs, getCacheStats } from './services/scanner.js';
 import { filterToken, filterTokenWithSecurity } from './services/filter.js';
 import { initBot, sendAlert, sendStartup, sendErrorNotification } from './services/telegram.js';
 import { startHealthServer } from './utils/health.js';
+import { startTrendingScanner } from './services/trendingScanner.js';
+
+// Scanner mode: 'search' (old) or 'trending' (new V1 API)
+const SCANNER_MODE = process.env.SCANNER_MODE || 'trending';
 
 let scanCount = 0;
 let tokensFound = 0;
@@ -94,9 +98,12 @@ function startScanner(): void {
 
 async function main(): Promise<void> {
   console.log('\n╔══════════════════════════════════════════╗');
-  console.log('║  Meme Coin Scanner v4.0 - SECURITY     ║');
-  console.log('║  Enhanced • Protected • Anti-Rug      ║');
+  console.log('║  Meme Coin Scanner v5.0 - TRENDING      ║');
+  console.log('║  V1 API • Boosts • CTO Support          ║');
   console.log('╚══════════════════════════════════════════╝\n');
+
+  logger.info(`Scanner Mode: ${SCANNER_MODE.toUpperCase()}`);
+  logger.info('');
 
   logger.info('Starting health check server...');
   startHealthServer();
@@ -112,7 +119,15 @@ async function main(): Promise<void> {
   logger.info('');
 
   await sendStartup();
-  startScanner();
+
+  // Choose scanner based on mode
+  if (SCANNER_MODE === 'trending') {
+    logger.info('Using TRENDING Scanner (DexScreener V1 API)...');
+    await startTrendingScanner();
+  } else {
+    logger.info('Using SEARCH Scanner (Legacy API)...');
+    startScanner();
+  }
 }
 
 process.on('uncaughtException', (error) => {
