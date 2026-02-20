@@ -78,17 +78,17 @@ async function processTrendingToken(trending: TrendingToken, sendNotification: b
         return false;
       }
       
-      // Stricter market cap filter - at least $50k
-      if (boostToken.marketCap && boostToken.marketCap < 50000) {
-        logger.info(`Skipping ${tokenAddress}: Low market cap ($${boostToken.marketCap} < $50k)`);
-        return false;
-      }
+      // Skip market cap filter (too restrictive) - now using config value
+      // if (boostToken.marketCap && boostToken.marketCap < 50000) {
+      //   logger.info(`Skipping ${tokenAddress}: Low market cap`);
+      //   return false;
+      // }
       
-      // Check for honeypot pattern - extreme price changes with low volume
+      // Check for honeypot pattern - only extreme cases
       if (boostToken.priceChange) {
         const priceChange = Math.abs(boostToken.priceChange.h24);
-        if (priceChange > 500 && (!boostToken.liquidity || boostToken.liquidity < 5000)) {
-          logger.info(`Skipping ${tokenAddress}: Honeypot pattern detected (${priceChange}% change, low liquidity)`);
+        if (priceChange > 800 && (!boostToken.liquidity || boostToken.liquidity < 2000)) {
+          logger.info(`Skipping ${tokenAddress}: Honeypot pattern detected (${priceChange}% change, very low liquidity)`);
           return false;
         }
       }
@@ -382,6 +382,13 @@ export async function scanTrendingTokens(): Promise<void> {
 export async function startTrendingScanner(): Promise<void> {
   logger.info('\n🚀 Starting Trending Tokens Scanner (V1 API)...');
   logger.info(`Poll interval: ${config.scanner.pollInterval}ms`);
+  
+  // Clear alerted tokens cache every 30 minutes to allow re-alerting
+  setInterval(() => {
+    const count = alertedTokens.size;
+    alertedTokens.clear();
+    logger.info(`🧹 Cleared alerted tokens cache (${count} entries removed)`);
+  }, 30 * 60 * 1000); // 30 minutes
   
   // Initial scan
   await scanTrendingTokens();
