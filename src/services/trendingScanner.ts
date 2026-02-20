@@ -15,8 +15,9 @@ let scanCount = 0;
 let tokensFound = 0;
 let tokensPassed = 0;
 const seenTokens = new Set<string>();
+let isFirstScan = true; // Flag to skip alerts on first scan
 
-async function processTrendingToken(trending: TrendingToken): Promise<boolean> {
+async function processTrendingToken(trending: TrendingToken, sendNotification: boolean = true): Promise<boolean> {
   try {
     const token = trending.token;
     const tokenAddress = token.tokenAddress;
@@ -34,6 +35,12 @@ async function processTrendingToken(trending: TrendingToken): Promise<boolean> {
     if (seenTokens.size > 1000) {
       const keys = Array.from(seenTokens);
       keys.slice(0, 500).forEach(k => seenTokens.delete(k));
+    }
+    
+    // Skip alert if first scan (just collect data)
+    if (isFirstScan) {
+      logger.info(`[FIRST SCAN] Collecting ${tokenAddress} without alert`);
+      return false;
     }
     
     // Get pair data for additional info
@@ -92,9 +99,11 @@ async function processTrendingToken(trending: TrendingToken): Promise<boolean> {
       if (boostToken.boosts && boostToken.boosts.active > 0) {
         logger.success(`🎯 Found boosted token: ${tokenAddress} (${boostToken.boosts.active} active boosts, MC: $${(boostToken.marketCap || 0)/1000}k)`);
         
-        // Format message for telegram
-        const message = formatBoostAlert(boostToken);
-        await sendBoostAlert(message);
+        // Only send notification if enabled
+        if (sendNotification) {
+          const message = formatBoostAlert(boostToken);
+          await sendBoostAlert(message);
+        }
         
         return true;
       }
@@ -105,8 +114,11 @@ async function processTrendingToken(trending: TrendingToken): Promise<boolean> {
       const takeover = token as CommunityTakeover;
       logger.success(`🏴 Found community takeover: ${tokenAddress}`);
       
-      const message = formatTakeoverAlert(takeover);
-      await sendBoostAlert(message);
+      // Only send notification if enabled
+      if (sendNotification) {
+        const message = formatTakeoverAlert(takeover);
+        await sendBoostAlert(message);
+      }
       
       return true;
     }
@@ -214,7 +226,15 @@ async function sendBoostAlert(message: string): Promise<boolean> {
 export async function scanTrendingTokens(): Promise<void> {
   try {
     scanCount++;
-    logger.info(`\n━━━ Trending Scan #${scanCount} ━━━`);
+    
+    // Mark first scan as complete after it finishes
+    const isFirstScanThisRun = isFirstScan;
+    if (isFirstScan) {
+      isFirstScan = false;
+      logger.info(`\n━━━ INITIAL SCAN - Collecting data only (no alerts) ━━━`);
+    } else {
+      logger.info(`\n━━━ Trending Scan #${scanCount - 1} ━━━`);
+    }
     
     const allTrending: TrendingToken[] = [];
     
@@ -253,10 +273,13 @@ export async function scanTrendingTokens(): Promise<void> {
     tokensFound += allTrending.length;
     logger.info(`Processing ${allTrending.length} trending token(s)...`);
     
+    // Only send notifications if not first scan
+    const sendNotification = !isFirstScanThisRun;
+    
     // Process each trending token
     for (const trending of allTrending) {
       try {
-        const processed = await processTrendingToken(trending);
+        const processed = await processTrendingToken(trending, sendNotification);
         if (processed) {
           tokensPassed++;
         }
