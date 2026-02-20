@@ -179,3 +179,41 @@ export function getUniqueChains(tokens: BoostToken[]): string[] {
   });
   return Array.from(chains);
 }
+
+// Historical candle data
+export interface CandleData {
+  time: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+// Fetch token price history (candles)
+export async function fetchTokenHistory(
+  chainId: string, 
+  pairAddress: string, 
+  timeframe: '1m' | '5m' | '15m' | '1h' | '4h' = '1h',
+  limit: number = 100
+): Promise<CandleData[]> {
+  try {
+    const url = `${DEX_BASE_URL}/prices/history/${chainId}/${pairAddress}?from=${timeframe}&limit=${limit}`;
+    logger.debug(`Fetching token history from: ${url}`);
+    
+    const response = await fetchWithRetry<{ tokenAddress: string; pairAddress: string; candles: CandleData[] }>(url, {
+      timeout: 10000,
+      retries: 2
+    });
+    
+    if (response?.candles && Array.isArray(response.candles)) {
+      logger.info(`Fetched ${response.candles.length} candles for ${pairAddress}`);
+      return response.candles;
+    }
+    
+    return [];
+  } catch (error) {
+    logger.error(`Failed to fetch history for ${pairAddress}:`, error);
+    return [];
+  }
+}

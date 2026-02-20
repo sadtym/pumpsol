@@ -5,6 +5,7 @@ import { filterToken, filterTokenWithSecurity } from './services/filter.js';
 import { initBot, sendAlert, sendStartup, sendErrorNotification } from './services/telegram.js';
 import { startHealthServer } from './utils/health.js';
 import { startTrendingScanner } from './services/trendingScanner.js';
+import { loadDatabase } from './services/database.js';
 
 // Scanner mode: 'search' (old) or 'trending' (new V1 API)
 const SCANNER_MODE = process.env.SCANNER_MODE || 'trending';
@@ -98,11 +99,16 @@ function startScanner(): void {
 
 async function main(): Promise<void> {
   console.log('\n╔══════════════════════════════════════════╗');
-  console.log('║  Meme Coin Scanner v5.0 - TRENDING      ║');
-  console.log('║  V1 API • Boosts • CTO Support          ║');
+  console.log('║  Meme Coin Scanner v6.0 - TRENDING     ║');
+  console.log('║  V1 API • Strategies • DB Support       ║');
   console.log('╚══════════════════════════════════════════╝\n');
 
   logger.info(`Scanner Mode: ${SCANNER_MODE.toUpperCase()}`);
+  logger.info('');
+
+  // Initialize database
+  logger.info('Loading database...');
+  loadDatabase();
   logger.info('');
 
   logger.info('Starting health check server...');

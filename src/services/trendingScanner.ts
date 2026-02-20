@@ -265,7 +265,8 @@ async function runStrategyAnalysis(
       price,
       priceChange5m,
       priceChange1h,
-      priceChange24h
+      priceChange24h,
+      pairData?.pairAddress // Pass pair address for historical data
     );
     
     // Send alerts for triggered strategies

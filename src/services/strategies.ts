@@ -1,5 +1,7 @@
 import { logger } from '../utils/logger.js';
 import { config } from '../config.js';
+import { fetchTokenHistory, CandleData } from './dexscreenerV1.js';
+import { updateToken, addAlert, loadDatabase, getDatabaseStats } from './database.js';
 
 // Price history for momentum detection
 interface PricePoint {
@@ -13,6 +15,7 @@ interface TokenHistory {
   prices: PricePoint[];
   firstSeen: number;
   lastSeen: number;
+  historicalLoaded: boolean;
 }
 
 // In-memory storage for token price history
@@ -25,6 +28,7 @@ interface StrategyConfig {
   minMomentumPercent: number; // Minimum % bounce
   maxPullbackPercent: number; // Maximum % pullback before signal
   minPriceChangePercent: number; // Minimum price change
+  useHistoricalData: boolean; // Fetch historical data from API
 }
 
 const defaultStrategyConfig: StrategyConfig = {
@@ -33,6 +37,7 @@ const defaultStrategyConfig: StrategyConfig = {
   minMomentumPercent: 10, // 10% bounce from low
   maxPullbackPercent: 40, // Max 40% pullback from ATH
   minPriceChangePercent: 5, // 5% minimum price change
+  useHistoricalData: true, // Use historical data from DexScreener
 };
 
 /**
@@ -78,9 +83,45 @@ function detectLocalExtrema(prices: PricePoint[]): { localHigh: number; localLow
 }
 
 /**
- * Update token price history
+ * Load historical data for a token from DexScreener API
  */
-export function updateTokenHistory(address: string, price: number, volume: number): void {
+async function loadHistoricalData(address: string, pairAddress?: string): Promise<PricePoint[]> {
+  if (!pairAddress) {
+    // Use address as pair address for Solana
+    pairAddress = address;
+  }
+  
+  try {
+    // Fetch 1h candles for the last 100 hours
+    const candles = await fetchTokenHistory('solana', pairAddress, '1h', 100);
+    
+    if (candles && candles.length > 0) {
+      // Convert candles to price points
+      const pricePoints: PricePoint[] = candles.map(candle => ({
+        price: candle.close,
+        timestamp: candle.time * 1000, // Convert to milliseconds
+        volume: candle.volume
+      }));
+      
+      logger.info(`📊 Loaded ${pricePoints.length} historical candles for ${address.slice(0, 8)}...`);
+      return pricePoints;
+    }
+  } catch (error) {
+    logger.error(`Failed to load historical data for ${address}:`, error);
+  }
+  
+  return [];
+}
+
+/**
+ * Update token price history - with historical data support
+ */
+export async function updateTokenHistory(
+  address: string, 
+  price: number, 
+  volume: number,
+  pairAddress?: string
+): Promise<void> {
   const now = Date.now();
   let history = tokenHistory.get(address);
   
@@ -89,18 +130,42 @@ export function updateTokenHistory(address: string, price: number, volume: numbe
       address,
       prices: [],
       firstSeen: now,
-      lastSeen: now
+      lastSeen: now,
+      historicalLoaded: false
     };
     tokenHistory.set(address, history);
+    
+    // Load historical data for new tokens
+    if (defaultStrategyConfig.useHistoricalData) {
+      const historicalPrices = await loadHistoricalData(address, pairAddress);
+      if (historicalPrices.length > 0) {
+        history.prices = historicalPrices;
+        history.historicalLoaded = true;
+      }
+    }
   }
   
-  // Add new price point
-  history.prices.push({ price, timestamp: now, volume });
+  // Add new price point if not duplicate
+  const lastPrice = history.prices[history.prices.length - 1];
+  if (!lastPrice || lastPrice.price !== price) {
+    history.prices.push({ price, timestamp: now, volume });
+  }
   history.lastSeen = now;
   
-  // Keep only last 100 price points
-  if (history.prices.length > 100) {
-    history.prices = history.prices.slice(-100);
+  // Keep only last 200 price points (including historical)
+  if (history.prices.length > 200) {
+    history.prices = history.prices.slice(-200);
+  }
+  
+  // Save to database for long-term analysis
+  try {
+    updateToken(address, {
+      price,
+      volume,
+      marketCap: 0 // Will be updated separately
+    });
+  } catch (error) {
+    logger.debug('Database update failed:', error);
   }
   
   // Cleanup old tokens (not seen in 30 minutes)
@@ -275,13 +340,26 @@ export async function analyzeTokenStrategies(
   price: number,
   priceChange5m: number,
   priceChange1h: number,
-  priceChange24h: number
+  priceChange24h: number,
+  pairAddress?: string
 ): Promise<{ triggered: boolean; messages: string[] }> {
   const messages: string[] = [];
   let triggered = false;
   
-  // Update price history
-  updateTokenHistory(address, price, volume);
+  // Update price history (with historical data for new tokens)
+  await updateTokenHistory(address, price, volume, pairAddress);
+  
+  // Save to database
+  try {
+    updateToken(address, {
+      price,
+      volume,
+      liquidity,
+      marketCap
+    });
+  } catch (error) {
+    logger.debug('Database update failed:', error);
+  }
   
   // Strategy 1: Volume Spike
   const volumeResult = await detectVolumeSpike(address, volume, price, priceChange1h);
@@ -289,6 +367,9 @@ export async function analyzeTokenStrategies(
     messages.push(volumeResult.message);
     triggered = true;
     logger.success(`📊 Volume Spike detected for ${address.slice(0, 8)}...`);
+    
+    // Save alert to database
+    addAlert(address, 'VOLUME_SPIKE', volumeResult.details);
   }
   
   // Strategy 2: Momentum Back
@@ -297,6 +378,9 @@ export async function analyzeTokenStrategies(
     messages.push(momentumResult.message);
     triggered = true;
     logger.success(`📈 Momentum Back detected for ${address.slice(0, 8)}...`);
+    
+    // Save alert to database
+    addAlert(address, 'MOMENTUM_BACK', momentumResult.details);
   }
   
   // Strategy 3: Fresh Token
@@ -305,6 +389,9 @@ export async function analyzeTokenStrategies(
     messages.push(freshResult.message);
     triggered = true;
     logger.success(`🆕 Fresh Token detected for ${address.slice(0, 8)}...`);
+    
+    // Save alert to database
+    addAlert(address, 'FRESH_TOKEN', freshResult.details);
   }
   
   return { triggered, messages };
@@ -314,13 +401,17 @@ export async function analyzeTokenStrategies(
  * Get strategy statistics
  */
 export function getStrategyStats(): any {
+  const dbStats = getDatabaseStats();
+  
   return {
     trackedTokens: tokenHistory.size,
     strategies: {
       volumeSpike: defaultStrategyConfig.minVolumeSpike + 'x',
       momentumBack: defaultStrategyConfig.minMomentumPercent + '% recovery',
-      freshToken: 'Newly tracked tokens'
-    }
+      freshToken: 'Newly tracked tokens',
+      useHistoricalData: defaultStrategyConfig.useHistoricalData
+    },
+    database: dbStats
   };
 }
 
